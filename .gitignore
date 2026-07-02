@@ -1,0 +1,20 @@
+# Trained model checkpoints — large binaries, don't belong in git
+*.pt
+*.pth
+checkpoints/
+checkpoints_diffusion/
+
+# Raw satellite data — large + license-restricted, don't redistribute
+data/raw/
+data/clean/
+*.tif
+*.tiff
+
+# Jupyter / Colab artifacts
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+
+# OS clutter
+.DS_Store
+Thumbs.db

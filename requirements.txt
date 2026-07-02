@@ -1,0 +1,9 @@
+torch
+torchvision
+rasterio
+scikit-image
+numpy
+scipy
+matplotlib
+pillow
+albumentations
