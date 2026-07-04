@@ -497,54 +497,123 @@
   }
   .results-footnote strong{ color:var(--teal); font-weight:600; }
 
-  /* ============ Demo ============ */
-  .demo-frame{
+  /* ============ Demo Launch Card ============ */
+  .demo-launch-card{
     position:relative;
     border-radius:var(--radius-porthole);
     border:1px solid rgba(2,195,154,.35);
     background:var(--bg-elevated-2);
     box-shadow:0 0 0 1px rgba(6,90,130,.25), 0 30px 60px -30px rgba(2,195,154,.35);
-    padding:var(--space-1);
-    min-height:520px;
-  }
-  .demo-frame .corner{
-    position:absolute;
-    width:22px; height:22px;
-    border-color:rgba(2,195,154,.65);
-    z-index:3;
-    pointer-events:none;
-  }
-  .demo-frame .corner--tl{ top:10px; left:10px; border-top:2px solid; border-left:2px solid; border-top-left-radius:6px; }
-  .demo-frame .corner--tr{ top:10px; right:10px; border-top:2px solid; border-right:2px solid; border-top-right-radius:6px; }
-  .demo-frame .corner--bl{ bottom:10px; left:10px; border-bottom:2px solid; border-left:2px solid; border-bottom-left-radius:6px; }
-  .demo-frame .corner--br{ bottom:10px; right:10px; border-bottom:2px solid; border-right:2px solid; border-bottom-right-radius:6px; }
-  .demo-frame iframe{
-    display:block;
-    width:100%;
-    min-height:512px;
-    border:0;
-    border-radius:calc(var(--radius-porthole) - 4px);
-  }
-  .demo-loading{
-    position:absolute;
-    inset:var(--space-1);
-    z-index:2;
+    overflow:hidden;
     display:flex;
     flex-direction:column;
     align-items:center;
     justify-content:center;
-    gap:var(--space-2);
+    gap:var(--space-4);
+    padding:var(--space-7) var(--space-4);
     text-align:center;
-    background:var(--bg-elevated-2);
-    border-radius:calc(var(--radius-porthole) - 4px);
-    transition:opacity .6s var(--ease-out);
+    min-height:440px;
   }
-  .demo-loading p{ margin:0; font-size:1.1rem; }
-  .demo-loading-note{
+  .demo-launch-card .corner{
+    position:absolute;
+    width:22px; height:22px;
+    border-color:rgba(2,195,154,.65);
+    pointer-events:none;
+  }
+  .demo-launch-card .corner--tl{ top:14px; left:14px; border-top:2px solid; border-left:2px solid; border-top-left-radius:6px; }
+  .demo-launch-card .corner--tr{ top:14px; right:14px; border-top:2px solid; border-right:2px solid; border-top-right-radius:6px; }
+  .demo-launch-card .corner--bl{ bottom:14px; left:14px; border-bottom:2px solid; border-left:2px solid; border-bottom-left-radius:6px; }
+  .demo-launch-card .corner--br{ bottom:14px; right:14px; border-bottom:2px solid; border-right:2px solid; border-bottom-right-radius:6px; }
+  .demo-launch-card::before{
+    content:'';
+    position:absolute;
+    inset:0;
+    background:radial-gradient(ellipse at 50% 0%, rgba(2,195,154,.10), transparent 68%);
+    pointer-events:none;
+  }
+  .demo-status-badge{
+    display:inline-flex;
+    align-items:center;
+    gap:.5rem;
     font-family:var(--font-mono);
-    font-size:.78rem !important;
+    font-size:.78rem;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--teal);
+    background:rgba(2,195,154,.1);
+    border:1px solid rgba(2,195,154,.3);
+    padding:.4rem 1rem;
+    border-radius:100px;
+  }
+  .demo-status-badge .live-dot{
+    width:7px; height:7px;
+    border-radius:50%;
+    background:var(--teal);
+    box-shadow:0 0 0 0 rgba(2,195,154,.6);
+    animation:pulse 1.8s ease-out infinite;
+  }
+  .demo-launch-icon{
+    width:80px; height:80px;
+    border-radius:50%;
+    background:linear-gradient(135deg, rgba(2,195,154,.18), rgba(6,90,130,.22));
+    border:1px solid rgba(2,195,154,.25);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:var(--teal);
+    font-size:2.2rem;
+    box-shadow:0 0 40px rgba(2,195,154,.12);
+  }
+  .demo-launch-title{
+    font-size:clamp(1.4rem, 2.5vw, 2rem);
+    font-weight:700;
+    color:var(--ink);
+    margin:0;
+  }
+  .demo-launch-desc{
+    color:var(--ink-dim);
+    max-width:44ch;
+    font-size:1rem;
+    margin:0;
+  }
+  .demo-features{
+    display:flex;
+    flex-wrap:wrap;
+    gap:.6rem;
+    justify-content:center;
+  }
+  .demo-feature-pill{
+    font-family:var(--font-mono);
+    font-size:.78rem;
+    color:var(--ink-dim);
+    background:rgba(255,255,255,.04);
+    border:1px solid var(--line);
+    padding:.4rem .9rem;
+    border-radius:100px;
+  }
+  .btn--demo-launch{
+    background:var(--teal);
+    color:#06110D;
+    font-size:1.05rem;
+    padding:1rem 2.2rem;
+    border-radius:12px;
+    font-weight:700;
+    display:inline-flex;
+    align-items:center;
+    gap:.6rem;
+    text-decoration:none;
+    box-shadow:0 0 0 0 rgba(2,195,154,.5), 0 8px 32px -8px rgba(2,195,154,.4);
+    transition:transform .25s var(--ease-out), box-shadow .25s var(--ease-out);
+  }
+  .btn--demo-launch:hover{
+    transform:translateY(-3px);
+    box-shadow:0 0 0 0 rgba(2,195,154,.5), 0 16px 40px -8px rgba(2,195,154,.55);
+  }
+  .btn--demo-launch svg{ flex-shrink:0; }
+  .demo-note{
+    font-family:var(--font-mono);
+    font-size:.75rem;
     color:var(--ink-faint);
-    max-width:34ch;
   }
   .pulse-dot{
     width:12px; height:12px;
@@ -557,19 +626,6 @@
     0%{ box-shadow:0 0 0 0 rgba(2,195,154,.55); }
     70%{ box-shadow:0 0 0 18px rgba(2,195,154,0); }
     100%{ box-shadow:0 0 0 0 rgba(2,195,154,0); }
-  }
-  .demo-loading.is-hidden{ opacity:0; pointer-events:none; }
-
-  .demo-fallback{
-    margin-top:var(--space-3);
-    color:var(--ink-dim);
-    font-size:.92rem;
-  }
-  .demo-fallback a{
-    color:var(--teal);
-    font-weight:600;
-    text-decoration:underline;
-    text-underline-offset:3px;
   }
 
   /* ============ Tech stack ============ */
@@ -859,25 +915,37 @@
         <h2 id="demo-title">Try it yourself</h2>
         <p class="section-sub">Upload any cloudy satellite-style image and watch the model reconstruct the ground beneath — running live on Hugging Face Spaces.</p>
       </div>
-      <div class="demo-frame reveal">
+      <div class="demo-launch-card reveal">
         <span class="corner corner--tl" aria-hidden="true"></span>
         <span class="corner corner--tr" aria-hidden="true"></span>
         <span class="corner corner--bl" aria-hidden="true"></span>
         <span class="corner corner--br" aria-hidden="true"></span>
-        <div class="demo-loading" id="demo-loading">
-          <span class="pulse-dot" aria-hidden="true"></span>
-          <p>Demo is waking up…</p>
-          <p class="demo-loading-note">Hugging Face Spaces can take up to a minute to cold-start after inactivity — thanks for your patience.</p>
+        <span class="demo-status-badge">
+          <span class="live-dot" aria-hidden="true"></span>
+          Live on Hugging Face Spaces
+        </span>
+        <div class="demo-launch-icon" aria-hidden="true">🛰️</div>
+        <p class="demo-launch-title">SkyClear Cloud Removal</p>
+        <p class="demo-launch-desc">Upload a cloudy satellite image and the GAN model will reconstruct the obscured ground beneath it — in seconds.</p>
+        <div class="demo-features" aria-label="Demo features">
+          <span class="demo-feature-pill">Drag &amp; Drop Upload</span>
+          <span class="demo-feature-pill">128×128 Inference</span>
+          <span class="demo-feature-pill">U-Net + PatchGAN</span>
+          <span class="demo-feature-pill">LISS-IV Trained</span>
         </div>
-        <iframe
-          id="demo-iframe"
-          src="https://shubhixion-skyclear-cloud-removal.hf.space"
-          title="SkyClear cloud removal — live demo"
-          loading="lazy"
-          allow="clipboard-write"
-        ></iframe>
+        <a
+          id="demo-launch-btn"
+          class="btn--demo-launch"
+          href="https://shubhixion-skyclear-cloud-removal.hf.space"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Open SkyClear demo on Hugging Face Spaces in a new tab"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Launch Demo
+        </a>
+        <p class="demo-note">Opens on Hugging Face Spaces · Free · No account required</p>
       </div>
-      <p class="demo-fallback">Demo not loading? <a href="https://shubhixion-skyclear-cloud-removal.hf.space" target="_blank" rel="noopener">Open it directly →</a></p>
     </div>
   </section>
 
