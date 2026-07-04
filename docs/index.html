@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SkyClear — GAN-Based Cloud Removal for LISS-IV Satellite Imagery</title>
+<meta name="description" content="SkyClear reconstructs cloud-obscured LISS-IV satellite imagery with a U-Net + PatchGAN model trained on synthetic fractal clouds over real ISRO Bhoonidhi imagery — built for the Bharatiya Antariksh Hackathon 2026 by Team SanjGPT." />
+<meta name="theme-color" content="#0B1026" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="SkyClear — GAN-Based Cloud Removal for LISS-IV Satellite Imagery" />
+<meta property="og:description" content="GAN-based cloud removal for LISS-IV satellite imagery. Try the live demo — seeing through the clouds, over every region of India." />
+<meta property="og:url" content="https://Shubhangam-Singh.github.io/SkyClear-BAH2026/" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230B1026'/%3E%3Cellipse cx='16' cy='16' rx='12' ry='5' fill='none' stroke='%2302C39A' stroke-width='1.6' transform='rotate(-20 16 16)'/%3E%3Ccircle cx='16' cy='16' r='2.6' fill='%2302C39A'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script type="module" src="https://gradio.s3-us-west-2.amazonaws.com/6.19.0/gradio.js"></script>
+<style>
+  /* ============ Tokens ============
+     bg          #0B1026  deep space navy (base)
+     bg-elevated #121A3F  panel / alt-section tone
+     bg-elevated-2 #16204A hover / nested tone
+     indigo      #21295C  structural accent
+     teal-deep   #065A82  bridge accent (gradients)
+     teal-bright #02C39A  primary accent — CTAs, live data, glow
+     ink / ink-dim / ink-faint — text tones
+     Type: display+body = Space Grotesk (one loaded family);
+           mono = system stack, used for data/telemetry-style labels
+  */
+  :root{
+    --bg:#0B1026;
+    --bg-elevated:#121A3F;
+    --bg-elevated-2:#16204A;
+    --line: rgba(148,163,220,0.16);
+    --line-strong: rgba(148,163,220,0.28);
+    --indigo:#21295C;
+    --teal-deep:#065A82;
+    --teal:#02C39A;
+    --ink:#EAF0FF;
+    --ink-dim:#98A6CE;
+    --ink-faint:#6B7699;
+    --font-display: "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    --space-1:.5rem; --space-2:1rem; --space-3:1.5rem; --space-4:2rem;
+    --space-5:3rem; --space-6:4.5rem; --space-7:6rem;
+    --radius-panel: 4px;
+    --radius-porthole: 22px;
+    --ease-out: cubic-bezier(.16,1,.3,1);
+  }
+
+  *,*::before,*::after{ box-sizing:border-box; }
+  html{ scroll-behavior:smooth; }
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--font-display);
+    font-size:clamp(1rem, .3vw + .9rem, 1.125rem);
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  img,canvas{ max-width:100%; display:block; }
+  a{ color:inherit; }
+  h1,h2,h3{ text-wrap:balance; margin:0; font-weight:700; }
+  p{ margin:0; }
+  ul,ol{ margin:0; padding:0; list-style:none; }
+
+  ::selection{ background:var(--teal); color:#06110D; }
+
+  :focus-visible{
+    outline:2px solid var(--teal);
+    outline-offset:3px;
+    border-radius:2px;
+  }
+
+  /* ============ Whole-page atmosphere: grain + cursor glow ============ */
+  .grain{
+    position:fixed; inset:0;
+    z-index:50;
+    pointer-events:none;
+    opacity:.035;
+    mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .cursor-glow{
+    position:fixed; inset:0;
+    z-index:55;
+    pointer-events:none;
+    opacity:0;
+    transition:opacity .5s ease;
+    background:radial-gradient(560px circle at var(--gx,50%) var(--gy,50%), rgba(2,195,154,.08), transparent 62%);
+  }
+  html.js .cursor-glow.is-active{ opacity:1; }
+  @media (hover:none){ .cursor-glow{ display:none; } }
+
+  .wrap{
+    max-width:1180px;
+    margin-inline:auto;
+    padding-inline:clamp(1.25rem, 4vw, 3rem);
+  }
+
+  .eyebrow{
+    font-family:var(--font-mono);
+    font-size:.78rem;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--teal);
+    margin:0 0 var(--space-2);
+  }
+
+  /* ============ Buttons ============ */
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    gap:.5rem;
+    padding:.85rem 1.6rem;
+    border-radius:10px;
+    font-family:var(--font-display);
+    font-weight:600;
+    font-size:.95rem;
+    text-decoration:none;
+    transition:transform .25s var(--ease-out), box-shadow .25s var(--ease-out), background .25s var(--ease-out);
+    white-space:nowrap;
+  }
+  .btn--primary{
+    position:relative;
+    overflow:hidden;
+    background:var(--teal);
+    color:#06110D;
+    box-shadow:0 0 0 0 rgba(2,195,154,.5);
+  }
+  .btn--primary::after{
+    content:"";
+    position:absolute; top:0; left:-60%;
+    width:40%; height:100%;
+    background:linear-gradient(120deg, transparent, rgba(255,255,255,.4), transparent);
+    transform:skewX(-20deg);
+    transition:left .6s ease;
+  }
+  .btn--primary:hover::after{ left:130%; }
+  .btn--primary:hover{
+    transform:translateY(-2px);
+    box-shadow:0 10px 30px -8px rgba(2,195,154,.55);
+  }
+  .btn--ghost{
+    background:transparent;
+    color:var(--ink);
+    border:1px solid var(--line-strong);
+  }
+  .btn--ghost:hover{
+    background:rgba(2,195,154,.08);
+    border-color:rgba(2,195,154,.5);
+    transform:translateY(-2px);
+  }
+
+  /* ============ Hero ============ */
+  .hero{
+    position:relative;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    overflow:hidden;
+    isolation:isolate;
+  }
+  .hero-atmosphere{
+    position:absolute; inset:0;
+    z-index:-1;
+  }
+  #starfield{ position:absolute; inset:0; width:100%; height:100%; opacity:.9; transition:transform .6s var(--ease-out); }
+  .nebula-wrap{ position:absolute; inset:0; transition:transform .6s var(--ease-out); }
+  .nebula{
+    position:absolute;
+    top:-20%; right:-10%;
+    width:70vw; height:70vw;
+    max-width:900px; max-height:900px;
+    background:radial-gradient(circle at 50% 50%, rgba(2,195,154,.16), rgba(6,90,130,.14) 40%, rgba(33,41,92,.10) 62%, transparent 72%);
+    filter:blur(10px);
+    animation:drift 34s ease-in-out infinite alternate;
+  }
+  @keyframes drift{
+    from{ transform:translate(0,0) scale(1); }
+    to{ transform:translate(-4%, 4%) scale(1.06); }
+  }
+  .scan-sweep{
+    position:absolute; top:0; bottom:0; left:0;
+    width:55%;
+    background:linear-gradient(100deg, transparent, rgba(2,195,154,.05), transparent);
+    mix-blend-mode:screen;
+    animation:sweep 11s ease-in-out infinite;
+  }
+  @keyframes sweep{ from{ transform:translateX(-60%); } to{ transform:translateX(220%); } }
+
+  .motes{ position:absolute; inset:0; overflow:hidden; }
+  .motes span{
+    position:absolute; bottom:-6%;
+    width:3px; height:3px; border-radius:50%;
+    background:var(--teal);
+    opacity:0;
+    animation:float-up 10s linear infinite;
+  }
+  .motes span:nth-child(1){ left:6%; animation-delay:0s; }
+  .motes span:nth-child(2){ left:16%; animation-delay:1.3s; animation-duration:12s; }
+  .motes span:nth-child(3){ left:28%; animation-delay:.6s; animation-duration:9s; }
+  .motes span:nth-child(4){ left:41%; animation-delay:2.2s; animation-duration:13s; }
+  .motes span:nth-child(5){ left:57%; animation-delay:1s; animation-duration:8s; }
+  .motes span:nth-child(6){ left:69%; animation-delay:3s; animation-duration:11s; }
+  .motes span:nth-child(7){ left:81%; animation-delay:.3s; animation-duration:10s; }
+  .motes span:nth-child(8){ left:92%; animation-delay:2.6s; animation-duration:9s; }
+  @keyframes float-up{
+    0%{ transform:translateY(0); opacity:0; }
+    8%{ opacity:.65; }
+    85%{ opacity:.35; }
+    100%{ transform:translateY(-62vh); opacity:0; }
+  }
+
+  .hero-grid{
+    display:grid;
+    grid-template-columns:1.1fr .9fr;
+    align-items:center;
+    gap:var(--space-6);
+    padding-block:var(--space-7);
+  }
+  .hero-copy{ max-width:640px; }
+  .tagline{
+    font-size:clamp(1.1rem, 1.4vw + .6rem, 1.5rem);
+    color:var(--ink);
+    margin-top:var(--space-2);
+    font-weight:500;
+  }
+  .hero-copy h1{
+    font-size:clamp(3rem, 8vw, 5.5rem);
+    line-height:.98;
+    letter-spacing:-.02em;
+    background:linear-gradient(120deg, var(--ink) 30%, var(--teal) 100%);
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+  }
+  .hero-sub{
+    margin-top:var(--space-3);
+    color:var(--ink-dim);
+    max-width:52ch;
+    font-size:1.05rem;
+  }
+  .hero-ctas{
+    display:flex;
+    flex-wrap:wrap;
+    gap:var(--space-2);
+    margin-top:var(--space-5);
+  }
+
+  .hero-hud{
+    position:relative;
+    aspect-ratio:1;
+    max-width:420px;
+    margin-inline:auto;
+    justify-self:center;
+    transition:transform .5s var(--ease-out);
+    will-change:transform;
+  }
+  .hud-ring{
+    position:absolute; inset:0;
+    border:1px solid var(--line-strong);
+    border-radius:50%;
+  }
+  .hud-ring--1{ inset:0; border-color:rgba(2,195,154,.35); }
+  .hud-ring--3{ inset:9%; border-style:dashed; border-color:rgba(148,163,220,.25); }
+
+  .globe{
+    position:absolute; inset:24%;
+    border-radius:50%;
+    overflow:hidden;
+    background:
+      radial-gradient(circle at 30% 26%, rgba(2,195,154,.4), transparent 46%),
+      radial-gradient(circle at 62% 72%, rgba(6,90,130,.55), rgba(11,16,38,.97) 68%);
+    box-shadow:inset 0 0 36px rgba(0,0,0,.55), 0 0 46px rgba(2,195,154,.16);
+    animation:breathe 7s ease-in-out infinite;
+  }
+  .globe-grid{ position:absolute; inset:0; width:100%; height:100%; }
+  .globe-grid ellipse{ fill:none; stroke:rgba(234,240,255,.24); stroke-width:.7; }
+  .globe-terminator{
+    position:absolute; inset:-15%;
+    background:conic-gradient(from 200deg, transparent 0deg, transparent 150deg, rgba(6,10,26,.7) 205deg, transparent 270deg, transparent 360deg);
+    animation:spin 24s linear infinite;
+    mix-blend-mode:multiply;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  @keyframes breathe{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.035); } }
+
+  .globe-marker{
+    position:absolute; top:32%; left:60%;
+    display:flex; align-items:center; gap:.35rem;
+  }
+  .marker-dot{
+    width:6px; height:6px; border-radius:50%;
+    background:var(--teal);
+    box-shadow:0 0 10px 3px rgba(2,195,154,.8);
+    animation:pulse 1.8s ease-out infinite;
+  }
+  .marker-label{
+    font-family:var(--font-mono); font-size:.6rem; letter-spacing:.05em;
+    color:var(--ink); background:rgba(11,16,38,.72);
+    padding:.12rem .4rem; border-radius:3px; white-space:nowrap;
+  }
+
+  .hud-orbit{
+    position:absolute; inset:0;
+    animation:orbit 18s linear infinite;
+  }
+  .hud-sat{
+    position:absolute; top:-8px; left:50%;
+    margin-left:-14px;
+    color:var(--teal);
+    filter:drop-shadow(0 0 6px rgba(2,195,154,.65));
+    animation:counter-orbit 18s linear infinite;
+  }
+  .hud-sat rect{ fill:currentColor; }
+  .hud-sat line{ stroke:currentColor; stroke-width:1; }
+  .hud-sat circle{ fill:currentColor; }
+  @keyframes orbit{ to{ transform:rotate(360deg); } }
+  @keyframes counter-orbit{ to{ transform:rotate(-360deg); } }
+
+  .scroll-cue{
+    position:absolute;
+    bottom:var(--space-4);
+    left:50%;
+    transform:translateX(-50%);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:.4rem;
+    color:var(--ink-faint);
+    font-family:var(--font-mono);
+    font-size:.7rem;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    text-decoration:none;
+    animation:bob 2.4s ease-in-out infinite;
+  }
+  @keyframes bob{ 0%,100%{ transform:translate(-50%,0);} 50%{ transform:translate(-50%,6px);} }
+
+  /* ============ Section rhythm ============ */
+  .section{ padding-block:clamp(4rem, 8vw, 7rem); }
+  .section--alt{ background:var(--bg-elevated); position:relative; }
+  .section--alt::before{
+    content:"";
+    position:absolute; top:0; left:0; right:0; height:1px;
+    background:linear-gradient(90deg, transparent, rgba(2,195,154,.35), transparent);
+  }
+  .section-head{ max-width:64ch; margin-bottom:var(--space-5); }
+  .section-head h2{ font-size:clamp(1.9rem, 3vw + .5rem, 2.75rem); }
+  .section-sub{ color:var(--ink-dim); margin-top:var(--space-2); font-size:1.05rem; }
+
+  /* ============ Problem ============ */
+  .problem-grid{
+    display:grid;
+    grid-template-columns:1.1fr .9fr;
+    gap:var(--space-6);
+    align-items:center;
+  }
+  .problem-grid h2{ font-size:clamp(1.9rem, 3vw + .5rem, 2.6rem); margin-bottom:var(--space-3); }
+  .problem-grid p{ color:var(--ink-dim); max-width:56ch; }
+  .problem-grid p + p{ margin-top:var(--space-2); }
+
+  .problem-visual{ position:relative; aspect-ratio:1/.85; }
+  .tile-grid{
+    position:absolute; inset:0;
+    display:grid;
+    grid-template-columns:repeat(6, 1fr);
+    grid-template-rows:repeat(4, 1fr);
+    gap:3px;
+    border-radius:12px;
+    overflow:hidden;
+  }
+  .tile-grid span{ background:#1b3a2e; }
+  .tile-grid span:nth-child(5n){ background:#2c4a2a; }
+  .tile-grid span:nth-child(4n){ background:#3f4a2c; }
+  .tile-grid span:nth-child(7n){ background:#123047; }
+  .tile-grid span:nth-child(3n+1){ background:#22412f; }
+  .cloud-blob{
+    position:absolute;
+    background:rgba(230,236,250,.9);
+    filter:blur(16px);
+    border-radius:42% 58% 65% 35% / 45% 40% 60% 55%;
+    animation:cloud-drift 18s ease-in-out infinite alternate;
+  }
+  .cloud-blob--1{ width:55%; height:50%; top:6%; left:8%; opacity:.85; }
+  .cloud-blob--2{ width:38%; height:36%; bottom:10%; right:6%; opacity:.7; border-radius:60% 40% 35% 65% / 55% 60% 40% 45%; animation-duration:22s; animation-delay:-4s; }
+  .cloud-blob--3{ width:26%; height:26%; top:38%; right:22%; opacity:.55; animation-duration:26s; animation-delay:-9s; }
+  @keyframes cloud-drift{ from{ transform:translate(0,0) scale(1); } to{ transform:translate(3%, -2%) scale(1.04); } }
+
+  /* ============ Pipeline ============ */
+  .pipeline{
+    display:grid;
+    grid-template-columns:repeat(4, 1fr);
+    gap:var(--space-3);
+    counter-reset:none;
+  }
+  .pipeline-step{
+    position:relative;
+    background:rgba(255,255,255,.02);
+    border:1px solid var(--line);
+    padding:var(--space-4) var(--space-3);
+    clip-path:polygon(0 14px, 14px 0, 100% 0, 100% 100%, 0 100%);
+    transform-style:preserve-3d;
+  }
+  .pipeline-step:not(:last-child)::after{
+    content:"";
+    position:absolute;
+    top:50%; right:-1.1rem;
+    width:.9rem; height:1px;
+    background:var(--line-strong);
+  }
+  .pipeline-step:not(:last-child)::before{
+    content:"";
+    position:absolute;
+    top:calc(50% - 4px); right:-1.3rem;
+    width:0; height:0;
+    border-top:4px solid transparent;
+    border-bottom:4px solid transparent;
+    border-left:5px solid var(--line-strong);
+  }
+  .step-icon{
+    color:var(--teal);
+    opacity:.85;
+    margin-bottom:var(--space-3);
+  }
+  .step-icon svg{ display:block; }
+  .step-index{
+    display:block;
+    font-family:var(--font-mono);
+    font-size:.8rem;
+    color:var(--teal);
+    letter-spacing:.08em;
+    margin-bottom:var(--space-2);
+  }
+  .pipeline-step h3{ font-size:1.1rem; margin-bottom:.5rem; }
+  .pipeline-step p{ color:var(--ink-dim); font-size:.92rem; }
+  .pipeline-step:hover{
+    border-color:rgba(2,195,154,.4);
+    background:rgba(2,195,154,.04);
+  }
+
+  .callout{
+    margin-top:var(--space-5);
+    padding:var(--space-4);
+    background:linear-gradient(120deg, rgba(33,41,92,.5), rgba(6,90,130,.25));
+    border:1px solid rgba(2,195,154,.28);
+    border-radius:var(--radius-panel);
+  }
+  .callout p{ color:var(--ink); max-width:72ch; }
+  .callout strong{ color:var(--teal); }
+
+  /* ============ Results ============ */
+  .stats{
+    display:grid;
+    grid-template-columns:repeat(4, 1fr);
+    gap:var(--space-3);
+  }
+  .stat-card{
+    background:rgba(255,255,255,.02);
+    border:1px solid var(--line);
+    border-top:2px solid var(--teal);
+    padding:var(--space-4) var(--space-3);
+    transform-style:preserve-3d;
+  }
+  .stat-card:hover{ transform:translateY(-4px); background:rgba(2,195,154,.05); }
+  .stats .stat-card:nth-child(1){ transition-delay:0s; }
+  .stats .stat-card:nth-child(2){ transition-delay:.08s; }
+  .stats .stat-card:nth-child(3){ transition-delay:.16s; }
+  .stats .stat-card:nth-child(4){ transition-delay:.24s; }
+  .stat-label{
+    font-family:var(--font-mono);
+    font-size:.72rem;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--ink-faint);
+    margin-bottom:var(--space-2);
+  }
+  .stat-value{
+    font-family:var(--font-mono);
+    font-variant-numeric:tabular-nums;
+    font-size:clamp(1.9rem, 3.4vw, 2.6rem);
+    font-weight:600;
+    color:var(--ink);
+  }
+  .stat-unit{ font-size:1.1rem; color:var(--ink-dim); }
+  .stat-note{ margin-top:var(--space-2); color:var(--ink-dim); font-size:.85rem; }
+
+  .results-footnote{
+    margin-top:var(--space-4);
+    color:var(--ink-dim);
+    font-size:.92rem;
+    max-width:78ch;
+    padding-left:var(--space-3);
+    border-left:2px solid var(--line-strong);
+  }
+  .results-footnote strong{ color:var(--teal); font-weight:600; }
+
+  /* ============ Demo ============ */
+  .demo-frame{
+    position:relative;
+    border-radius:var(--radius-porthole);
+    border:1px solid rgba(2,195,154,.35);
+    background:var(--bg-elevated-2);
+    box-shadow:0 0 0 1px rgba(6,90,130,.25), 0 30px 60px -30px rgba(2,195,154,.35);
+    padding:var(--space-1);
+    min-height:520px;
+  }
+  .demo-frame .corner{
+    position:absolute;
+    width:22px; height:22px;
+    border-color:rgba(2,195,154,.65);
+    z-index:3;
+    pointer-events:none;
+  }
+  .demo-frame .corner--tl{ top:10px; left:10px; border-top:2px solid; border-left:2px solid; border-top-left-radius:6px; }
+  .demo-frame .corner--tr{ top:10px; right:10px; border-top:2px solid; border-right:2px solid; border-top-right-radius:6px; }
+  .demo-frame .corner--bl{ bottom:10px; left:10px; border-bottom:2px solid; border-left:2px solid; border-bottom-left-radius:6px; }
+  .demo-frame .corner--br{ bottom:10px; right:10px; border-bottom:2px solid; border-right:2px solid; border-bottom-right-radius:6px; }
+  gradio-app{
+    display:block;
+    width:100%;
+    min-height:512px;
+    border-radius:calc(var(--radius-porthole) - 4px);
+    overflow:hidden;
+  }
+  .demo-loading{
+    position:absolute;
+    inset:var(--space-1);
+    z-index:2;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:var(--space-2);
+    text-align:center;
+    background:var(--bg-elevated-2);
+    border-radius:calc(var(--radius-porthole) - 4px);
+    transition:opacity .6s var(--ease-out);
+  }
+  .demo-loading p{ margin:0; font-size:1.1rem; }
+  .demo-loading-note{
+    font-family:var(--font-mono);
+    font-size:.78rem !important;
+    color:var(--ink-faint);
+    max-width:34ch;
+  }
+  .pulse-dot{
+    width:12px; height:12px;
+    border-radius:50%;
+    background:var(--teal);
+    box-shadow:0 0 0 0 rgba(2,195,154,.6);
+    animation:pulse 1.8s ease-out infinite;
+  }
+  @keyframes pulse{
+    0%{ box-shadow:0 0 0 0 rgba(2,195,154,.55); }
+    70%{ box-shadow:0 0 0 18px rgba(2,195,154,0); }
+    100%{ box-shadow:0 0 0 0 rgba(2,195,154,0); }
+  }
+  .demo-loading.is-hidden{ opacity:0; pointer-events:none; }
+
+  .demo-fallback{
+    margin-top:var(--space-3);
+    color:var(--ink-dim);
+    font-size:.92rem;
+  }
+  .demo-fallback a{
+    color:var(--teal);
+    font-weight:600;
+    text-decoration:underline;
+    text-underline-offset:3px;
+  }
+
+  /* ============ Tech stack ============ */
+  .stack .eyebrow{ text-align:center; }
+  .pill-row{
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:center;
+    gap:.6rem;
+  }
+  .pill{
+    font-family:var(--font-mono);
+    font-size:.82rem;
+    color:var(--ink-dim);
+    border:1px solid var(--line);
+    padding:.5rem 1rem;
+    border-radius:100px;
+    background:rgba(255,255,255,.02);
+  }
+  .pill:nth-child(3n+1){ border-color:rgba(2,195,154,.25); }
+  .pill:nth-child(3n+2){ border-color:rgba(6,90,130,.4); }
+
+  /* ============ Footer ============ */
+  .site-footer{
+    border-top:1px solid var(--line);
+    padding-block:var(--space-5);
+    background:var(--bg-elevated);
+  }
+  .footer-grid{
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:space-between;
+    gap:var(--space-3);
+  }
+  .footer-title{ font-weight:700; font-size:1.1rem; }
+  .footer-meta{ color:var(--ink-faint); font-size:.85rem; margin-top:.25rem; }
+  .footer-links{ display:flex; flex-wrap:wrap; gap:var(--space-4); align-self:center; }
+  .footer-links a{
+    font-family:var(--font-mono);
+    font-size:.82rem;
+    color:var(--ink-dim);
+    text-decoration:none;
+    border-bottom:1px solid transparent;
+  }
+  .footer-links a:hover{ color:var(--teal); border-color:var(--teal); }
+
+  /* ============ Reveal-on-scroll (progressive enhancement) ============ */
+  html.js .reveal{ opacity:0; transform:translateY(24px); transition:opacity .7s var(--ease-out), transform .7s var(--ease-out); }
+  html.js .reveal.is-visible{ opacity:1; transform:none; }
+
+  /* Cards are both .reveal and interactive (hover/tilt) — the transition shorthand
+     is winner-takes-all per selector, so give these two their own complete list
+     (placed after .reveal) rather than letting the two partially cancel out. */
+  .stat-card, .pipeline-step{
+    transition:opacity .6s var(--ease-out), transform .3s var(--ease-out), border-color .25s ease, background .25s ease;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    html{ scroll-behavior:auto; }
+    .nebula, .hud-orbit, .hud-sat, .scroll-cue, .pulse-dot,
+    .globe, .globe-terminator, .marker-dot, .scan-sweep, .motes span, .cloud-blob{
+      animation:none !important;
+    }
+    html.js .reveal{ opacity:1; transform:none; transition:none; }
+  }
+
+  /* ============ Responsive ============ */
+  @media (max-width:900px){
+    .hero-grid{ grid-template-columns:1fr; text-align:left; padding-block:var(--space-6); gap:var(--space-5); }
+    .hero-hud{ order:-1; max-width:260px; margin-inline:auto; }
+    .problem-grid{ grid-template-columns:1fr; }
+    .problem-visual{ order:-1; max-width:420px; }
+    .pipeline{ grid-template-columns:1fr; }
+    .pipeline-step:not(:last-child)::after,
+    .pipeline-step:not(:last-child)::before{ display:none; }
+    .stats{ grid-template-columns:repeat(2, 1fr); }
+  }
+  @media (max-width:560px){
+    .hero-hud{ max-width:200px; }
+    .marker-label{ display:none; }
+    .stats{ grid-template-columns:1fr; }
+    .hero-ctas{ flex-direction:column; align-items:stretch; }
+    .btn{ justify-content:center; }
+    .footer-grid{ flex-direction:column; }
+  }
+</style>
+</head>
+<body>
+<script>document.documentElement.classList.add('js');</script>
+<div class="grain" aria-hidden="true"></div>
+<div class="cursor-glow" id="cursor-glow" aria-hidden="true"></div>
+
+<header class="hero" id="top">
+  <div class="hero-atmosphere" aria-hidden="true">
+    <canvas id="starfield"></canvas>
+    <div class="nebula-wrap" id="nebula-wrap"><div class="nebula"></div></div>
+    <div class="scan-sweep"></div>
+    <div class="motes">
+      <span></span><span></span><span></span><span></span>
+      <span></span><span></span><span></span><span></span>
+    </div>
+  </div>
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <p class="eyebrow">ISRO Bharatiya Antariksh Hackathon 2026</p>
+      <h1>SkyClear</h1>
+      <p class="tagline">Seeing through the clouds, over every region of India</p>
+      <p class="hero-sub">GAN-based cloud removal for LISS-IV satellite imagery — built for ISRO's Bharatiya Antariksh Hackathon 2026 by Team SanjGPT.</p>
+      <div class="hero-ctas">
+        <a class="btn btn--primary" href="#demo">Try the Live Demo</a>
+        <a class="btn btn--ghost" href="https://github.com/Shubhangam-Singh/SkyClear-BAH2026" target="_blank" rel="noopener">View on GitHub</a>
+      </div>
+    </div>
+    <div class="hero-hud" id="hero-hud" aria-hidden="true">
+      <div class="hud-ring hud-ring--1"></div>
+      <div class="hud-ring hud-ring--3"></div>
+      <div class="globe">
+        <svg class="globe-grid" viewBox="0 0 100 100">
+          <ellipse cx="50" cy="50" rx="48" ry="48"></ellipse>
+          <ellipse cx="50" cy="50" rx="48" ry="16"></ellipse>
+          <ellipse cx="50" cy="50" rx="48" ry="16" transform="rotate(60 50 50)"></ellipse>
+          <ellipse cx="50" cy="50" rx="48" ry="16" transform="rotate(120 50 50)"></ellipse>
+          <ellipse cx="50" cy="26" rx="38" ry="7"></ellipse>
+          <ellipse cx="50" cy="74" rx="38" ry="7"></ellipse>
+        </svg>
+        <div class="globe-terminator"></div>
+        <div class="globe-marker">
+          <span class="marker-dot"></span>
+          <span class="marker-label">N.E. INDIA</span>
+        </div>
+      </div>
+      <div class="hud-orbit">
+        <svg class="hud-sat" viewBox="0 0 40 24" width="28" height="17">
+          <rect x="16" y="8" width="8" height="8" rx="1.2"></rect>
+          <rect x="1" y="10.5" width="13" height="3" opacity=".6"></rect>
+          <rect x="26" y="10.5" width="13" height="3" opacity=".6"></rect>
+          <line x1="14" y1="12" x2="16" y2="12"></line>
+          <line x1="24" y1="12" x2="26" y2="12"></line>
+          <circle cx="20" cy="6.5" r="1.5"></circle>
+          <line x1="20" y1="6.5" x2="20" y2="8"></line>
+        </svg>
+      </div>
+    </div>
+  </div>
+  <a class="scroll-cue" href="#problem">
+    <span>Scroll</span>
+    <svg width="14" height="20" viewBox="0 0 14 20" fill="none" aria-hidden="true">
+      <path d="M1 1L7 7L13 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M1 12L7 18L13 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+    </svg>
+  </a>
+</header>
+
+<main>
+
+  <section class="section" id="problem" aria-labelledby="problem-title">
+    <div class="wrap problem-grid">
+      <div class="reveal">
+        <p class="eyebrow">The Problem</p>
+        <h2 id="problem-title">Clouds don't just block a view — they erase a moment</h2>
+        <p>Persistent cloud cover over tropical and mountainous regions of India — the North Eastern Region especially — regularly blinds optical satellites like LISS-IV, and it tends to happen exactly when a clear image matters most: disaster response, monsoon-season monitoring, land-use mapping.</p>
+        <p>Traditional cloud masking doesn't solve this. It simply discards the obscured pixels, leaving an incomplete scene — even though the satellite already made the pass.</p>
+      </div>
+      <div class="problem-visual reveal" role="img" aria-label="Illustration of clouds obscuring parts of a satellite image tile grid">
+        <div class="tile-grid" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <div class="cloud-blob cloud-blob--1" aria-hidden="true"></div>
+        <div class="cloud-blob cloud-blob--2" aria-hidden="true"></div>
+        <div class="cloud-blob cloud-blob--3" aria-hidden="true"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt" id="pipeline" aria-labelledby="pipeline-title">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <p class="eyebrow">How It Works</p>
+        <h2 id="pipeline-title">From obscured to analysis-ready, in one pass</h2>
+      </div>
+      <ol class="pipeline">
+        <li class="pipeline-step reveal">
+          <div class="step-icon" aria-hidden="true">
+            <svg viewBox="0 0 40 24" width="30" height="18">
+              <circle cx="12" cy="14" r="8" fill="currentColor"></circle>
+              <circle cx="20" cy="9" r="9" fill="currentColor"></circle>
+              <circle cx="28" cy="14" r="7" fill="currentColor"></circle>
+              <rect x="8" y="14" width="24" height="8" rx="4" fill="currentColor"></rect>
+            </svg>
+          </div>
+          <span class="step-index">01</span>
+          <h3>Cloudy LISS-IV Input</h3>
+          <p>A satellite scene with regions obscured by real atmospheric cloud cover.</p>
+        </li>
+        <li class="pipeline-step reveal">
+          <div class="step-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="24" height="24">
+              <rect x="1" y="1" width="6" height="6" fill="currentColor"></rect>
+              <rect x="9" y="1" width="6" height="6" fill="currentColor" opacity=".3"></rect>
+              <rect x="17" y="1" width="6" height="6" fill="currentColor"></rect>
+              <rect x="1" y="9" width="6" height="6" fill="currentColor" opacity=".3"></rect>
+              <rect x="9" y="9" width="6" height="6" fill="currentColor"></rect>
+              <rect x="17" y="9" width="6" height="6" fill="currentColor" opacity=".3"></rect>
+              <rect x="1" y="17" width="6" height="6" fill="currentColor"></rect>
+              <rect x="9" y="17" width="6" height="6" fill="currentColor" opacity=".3"></rect>
+              <rect x="17" y="17" width="6" height="6" fill="currentColor"></rect>
+            </svg>
+          </div>
+          <span class="step-index">02</span>
+          <h3>Cloud Detection &amp; Masking</h3>
+          <p>Cloud-affected regions within the scene are identified.</p>
+        </li>
+        <li class="pipeline-step reveal">
+          <div class="step-icon" aria-hidden="true">
+            <svg viewBox="0 0 40 24" width="30" height="18">
+              <circle cx="6" cy="12" r="4" fill="currentColor"></circle>
+              <circle cx="20" cy="5" r="3" fill="currentColor"></circle>
+              <circle cx="20" cy="19" r="3" fill="currentColor"></circle>
+              <circle cx="34" cy="12" r="4" fill="currentColor"></circle>
+              <line x1="9.5" y1="10.5" x2="17.5" y2="6.5" stroke="currentColor" stroke-width="1.4"></line>
+              <line x1="9.5" y1="13.5" x2="17.5" y2="17.5" stroke="currentColor" stroke-width="1.4"></line>
+              <line x1="22.5" y1="6" x2="30.5" y2="10.5" stroke="currentColor" stroke-width="1.4"></line>
+              <line x1="22.5" y1="18" x2="30.5" y2="13.5" stroke="currentColor" stroke-width="1.4"></line>
+            </svg>
+          </div>
+          <span class="step-index">03</span>
+          <h3>GAN Reconstruction</h3>
+          <p>A U-Net generator and PatchGAN discriminator reconstruct the ground hidden beneath.</p>
+        </li>
+        <li class="pipeline-step reveal">
+          <div class="step-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="24" height="24">
+              <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"></circle>
+              <path d="M7 12l3 3 7-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </div>
+          <span class="step-index">04</span>
+          <h3>Analysis-Ready Output</h3>
+          <p>A complete scene — no discarded data, no extra satellite pass required.</p>
+        </li>
+      </ol>
+      <div class="callout reveal">
+        <p><strong>The key insight:</strong> naturally-paired cloudy/clean images of the same location barely exist. So SkyClear synthesizes realistic fractal clouds — soft edges, variable opacity, simulated shadows — over real cloud-free LISS-IV scenes, producing unlimited (cloudy, clean) training pairs without waiting on rare paired acquisitions.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="results" aria-labelledby="results-title">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <p class="eyebrow">Results</p>
+        <h2 id="results-title">Measured against ground truth, not intuition</h2>
+      </div>
+      <div class="stats">
+        <div class="stat-card reveal">
+          <p class="stat-label">PSNR · full-dataset sample</p>
+          <p class="stat-value"><span class="stat-num" data-target="24.6" data-decimals="1">0</span>–<span class="stat-num" data-target="26.0" data-decimals="1">0</span><span class="stat-unit"> dB</span></p>
+          <p class="stat-note">~3,600-image training run</p>
+        </div>
+        <div class="stat-card reveal">
+          <p class="stat-label">SSIM · full-dataset sample</p>
+          <p class="stat-value"><span class="stat-num" data-target="0.903" data-decimals="3">0</span>–<span class="stat-num" data-target="0.928" data-decimals="3">0</span></p>
+          <p class="stat-note">structural similarity</p>
+        </div>
+        <div class="stat-card reveal">
+          <p class="stat-label">Training images</p>
+          <p class="stat-value"><span class="stat-num" data-target="3600" data-decimals="0">0</span><span class="stat-unit">+</span></p>
+          <p class="stat-note">real LISS-IV tiles + seed data</p>
+        </div>
+        <div class="stat-card reveal">
+          <p class="stat-label">Held-out generalization</p>
+          <p class="stat-value"><span class="stat-num" data-target="22.0" data-decimals="1">0</span><span class="stat-unit"> dB</span></p>
+          <p class="stat-note">unseen image, never trained on · SSIM 0.891</p>
+        </div>
+      </div>
+      <p class="results-footnote reveal">Tested on genuinely cloudy LISS-IV scenes — not just synthetic test cases — the model shows partial reconstruction with residual haze in places. This <strong>sim-to-real domain gap</strong> is identified and documented as the primary direction for future work.</p>
+    </div>
+  </section>
+
+  <section class="section section--alt" id="demo" aria-labelledby="demo-title">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <p class="eyebrow">Live Demo</p>
+        <h2 id="demo-title">Try it yourself</h2>
+        <p class="section-sub">Upload any cloudy satellite-style image and watch the model reconstruct the ground beneath — running live on Hugging Face Spaces.</p>
+      </div>
+      <div class="demo-frame reveal">
+        <span class="corner corner--tl" aria-hidden="true"></span>
+        <span class="corner corner--tr" aria-hidden="true"></span>
+        <span class="corner corner--bl" aria-hidden="true"></span>
+        <span class="corner corner--br" aria-hidden="true"></span>
+        <div class="demo-loading" id="demo-loading">
+          <span class="pulse-dot" aria-hidden="true"></span>
+          <p>Demo is waking up…</p>
+          <p class="demo-loading-note">Hugging Face Spaces can take up to a minute to cold-start after inactivity — thanks for your patience.</p>
+        </div>
+        <gradio-app src="https://shubhixion-skyclear-cloud-removal.hf.space"></gradio-app>
+      </div>
+      <p class="demo-fallback">Demo not loading? <a href="https://shubhixion-skyclear-cloud-removal.hf.space" target="_blank" rel="noopener">Open it directly →</a></p>
+    </div>
+  </section>
+
+  <section class="section stack" id="stack" aria-labelledby="stack-title">
+    <div class="wrap">
+      <p class="eyebrow" id="stack-title" style="text-align:center;">Built With</p>
+      <ul class="pill-row">
+        <li class="pill">PyTorch</li>
+        <li class="pill">GANs — U-Net + PatchGAN</li>
+        <li class="pill">Rasterio / GDAL</li>
+        <li class="pill">LISS-IV via Bhoonidhi (ISRO)</li>
+        <li class="pill">Google Colab T4</li>
+        <li class="pill">Gradio</li>
+        <li class="pill">Hugging Face Spaces</li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-grid">
+    <div>
+      <p class="footer-title">SkyClear</p>
+      <p class="footer-meta">Team SanjGPT — Bharatiya Antariksh Hackathon 2026</p>
+    </div>
+    <nav class="footer-links" aria-label="Footer">
+      <a href="https://github.com/Shubhangam-Singh/SkyClear-BAH2026" target="_blank" rel="noopener">GitHub Repo</a>
+      <a href="https://huggingface.co/spaces/shubhixion/skyclear-cloud-removal" target="_blank" rel="noopener">Hugging Face Space</a>
+      <a href="https://bhoonidhi.nrsc.gov.in" target="_blank" rel="noopener">Bhoonidhi (ISRO Data Source)</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+  // Starfield — single static draw + debounced resize redraw (no per-frame cost)
+  (function () {
+    var canvas = document.getElementById('starfield');
+    if (!canvas) return;
+    var ctx = canvas.getContext('2d');
+    var dpr = window.devicePixelRatio || 1;
+
+    function draw() {
+      var hero = canvas.closest('.hero');
+      var w = hero.offsetWidth, h = hero.offsetHeight;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      var count = Math.floor((canvas.width * canvas.height) / 9000);
+      for (var i = 0; i < count; i++) {
+        var x = Math.random() * canvas.width;
+        var y = Math.random() * canvas.height;
+        var r = Math.random() * 1.4 * dpr + 0.3;
+        var a = (Math.random() * 0.6 + 0.2).toFixed(2);
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(234,240,255,' + a + ')';
+        ctx.fill();
+      }
+    }
+    draw();
+    var resizeTimer;
+    window.addEventListener('resize', function () {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(draw, 200);
+    });
+  })();
+
+  // Reveal-on-scroll
+  (function () {
+    var els = document.querySelectorAll('.reveal');
+    if (!('IntersectionObserver' in window) || !els.length) return;
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          io.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.15 });
+    els.forEach(function (el) { io.observe(el); });
+  })();
+
+  // Count-up stat numbers
+  (function () {
+    var cards = document.querySelectorAll('.stat-card');
+    if (!cards.length) return;
+    var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function setFinal(el) {
+      var target = parseFloat(el.dataset.target);
+      var decimals = parseInt(el.dataset.decimals || '0', 10);
+      el.textContent = target.toFixed(decimals);
+    }
+
+    function animate(el) {
+      if (reduceMotion) { setFinal(el); return; }
+      var target = parseFloat(el.dataset.target);
+      var decimals = parseInt(el.dataset.decimals || '0', 10);
+      var duration = 1400;
+      var start = null;
+      function tick(ts) {
+        if (start === null) start = ts;
+        var p = Math.min((ts - start) / duration, 1);
+        var eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = (target * eased).toFixed(decimals);
+        if (p < 1) requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    }
+
+    if (!('IntersectionObserver' in window)) {
+      document.querySelectorAll('.stat-num').forEach(setFinal);
+    } else {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            entry.target.querySelectorAll('.stat-num').forEach(animate);
+            io.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.4 });
+      cards.forEach(function (c) { io.observe(c); });
+    }
+  })();
+
+  // Gradio embed loading placeholder
+  (function () {
+    var app = document.querySelector('gradio-app');
+    var overlay = document.getElementById('demo-loading');
+    if (!app || !overlay) return;
+    var done = false;
+    function hide() {
+      if (done) return;
+      done = true;
+      overlay.classList.add('is-hidden');
+    }
+    var poll = setInterval(function () {
+      if ((app.shadowRoot && app.shadowRoot.childElementCount > 0) || app.children.length > 0) {
+        hide();
+        clearInterval(poll);
+      }
+    }, 400);
+    setTimeout(function () { hide(); clearInterval(poll); }, 16000);
+  })();
+
+  // Mouse parallax on the hero atmosphere/HUD — desktop pointer only, skipped for reduced motion
+  (function () {
+    var hero = document.querySelector('.hero');
+    var hud = document.getElementById('hero-hud');
+    var nebulaWrap = document.getElementById('nebula-wrap');
+    var starfield = document.getElementById('starfield');
+    if (!hero) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+
+    var mx = 0, my = 0, raf = null;
+    function apply() {
+      raf = null;
+      if (hud) hud.style.transform = 'translate(' + (mx * -10).toFixed(1) + 'px,' + (my * -10).toFixed(1) + 'px)';
+      if (nebulaWrap) nebulaWrap.style.transform = 'translate(' + (mx * 14).toFixed(1) + 'px,' + (my * 14).toFixed(1) + 'px)';
+      if (starfield) starfield.style.transform = 'translate(' + (mx * 4).toFixed(1) + 'px,' + (my * 4).toFixed(1) + 'px)';
+    }
+    hero.addEventListener('mousemove', function (e) {
+      var r = hero.getBoundingClientRect();
+      mx = ((e.clientX - r.left) / r.width - 0.5) * 2;
+      my = ((e.clientY - r.top) / r.height - 0.5) * 2;
+      if (!raf) raf = requestAnimationFrame(apply);
+    });
+    hero.addEventListener('mouseleave', function () {
+      mx = 0; my = 0;
+      if (!raf) raf = requestAnimationFrame(apply);
+    });
+  })();
+
+  // Whole-page cursor glow — desktop pointer only, skipped for reduced motion
+  (function () {
+    var glow = document.getElementById('cursor-glow');
+    if (!glow) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+
+    var raf = null, gx = window.innerWidth / 2, gy = window.innerHeight / 2;
+    function apply() {
+      raf = null;
+      glow.style.setProperty('--gx', gx + 'px');
+      glow.style.setProperty('--gy', gy + 'px');
+    }
+    window.addEventListener('mousemove', function (e) {
+      gx = e.clientX; gy = e.clientY;
+      glow.classList.add('is-active');
+      if (!raf) raf = requestAnimationFrame(apply);
+    });
+  })();
+
+  // 3D tilt-on-hover for pipeline steps and stat cards — desktop pointer only
+  (function () {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+
+    function attachTilt(selector, maxTilt) {
+      document.querySelectorAll(selector).forEach(function (el) {
+        el.addEventListener('mousemove', function (e) {
+          var r = el.getBoundingClientRect();
+          var px = (e.clientX - r.left) / r.width - 0.5;
+          var py = (e.clientY - r.top) / r.height - 0.5;
+          el.style.transform =
+            'perspective(700px) rotateX(' + (-py * maxTilt).toFixed(2) + 'deg) ' +
+            'rotateY(' + (px * maxTilt).toFixed(2) + 'deg) translateY(-4px)';
+        });
+        el.addEventListener('mouseleave', function () {
+          el.style.transform = '';
+        });
+      });
+    }
+    attachTilt('.stat-card', 6);
+    attachTilt('.pipeline-step', 5);
+  })();
+</script>
+</body>
+</html>

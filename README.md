@@ -3,6 +3,8 @@
 **Bharatiya Antariksh Hackathon (BAH) 2026 — Team SanjGPT**
 Problem Statement 02: Generative AI-Based Cloud Removal and Reconstruction for LISS-IV Satellite Imagery
 
+🌐 **[Live Website](https://Shubhangam-Singh.github.io/SkyClear-BAH2026/)** — landing page + interactive live demo
+
 ---
 
 ## Overview
