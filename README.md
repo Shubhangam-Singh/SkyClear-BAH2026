@@ -85,7 +85,13 @@ Sample outputs are in [`outputs/`](./outputs).
 
 ```
 skyclear_gan/
-├── SkyClear_Day1_Pipeline.ipynb   # Full Colab-ready pipeline: data → training → eval
+├── SkyClear_Day1_Pipeline_(1).ipynb   # Full Colab-ready pipeline: data → training → eval
+├── src/                             # Local (non-Colab) refactor of the same pipeline logic
+│   ├── cloud_generator.py
+│   ├── dataset.py
+│   ├── model.py
+│   ├── train.py
+│   └── inference.py
 ├── README.md
 ├── requirements.txt
 ├── outputs/                        # Sample before/after result images
@@ -121,6 +127,61 @@ skyclear_gan/
    ```
 4. Register on [Bhoonidhi](https://bhoonidhi.nrsc.gov.in) and download LISS-IV scenes (Satellite filter: ResourceSat-2 / ResourceSat-2A, Sensor Type: LISS4, Pricing: OpenData_DirectDownload)
 5. Run all notebook cells top to bottom. Training checkpoints save to Drive every epoch — safe to resume after a Colab disconnect via the provided `load_checkpoint()` function.
+
+---
+
+## Local Usage
+
+The core pipeline logic (cloud synthesis, dataset, model, training loop, inference) is also
+available as plain Python modules under [`src/`](./src), refactored out of the notebook for
+running from the command line instead of Colab. The notebook remains the canonical, fully
+self-contained walkthrough — `src/` is an addition for local/offline use, not a replacement.
+
+```
+src/
+├── cloud_generator.py   # synthetic fractal cloud mask + overlay
+├── dataset.py           # SyntheticCloudDataset (clean image -> (cloudy, clean, mask))
+├── model.py             # UNetGenerator + PatchDiscriminator
+├── train.py             # CLI training loop, checkpoints every epoch
+└── inference.py         # loads a checkpoint, runs cloud removal on one image
+```
+
+Install dependencies first (same `requirements.txt` as the notebook):
+
+```bash
+pip install -r requirements.txt
+```
+
+### Running inference on a sample image
+
+Given a trained checkpoint (default expected at `checkpoints/skyclear_epoch65.pt`), run:
+
+```bash
+python -m src.inference --input path/to/sample.jpg --output outputs/inference_result.png
+```
+
+This resizes the input to the model's working resolution (128×128 by default — must stay
+divisible by 16 to match the generator's 4 down/up-sampling stages), runs it through the
+generator, and saves a side-by-side before/after PNG to `--output`. Useful flags:
+
+- `--checkpoint <path>` — use a different trained checkpoint
+- `--img-size <n>` — override the working resolution (must match how the checkpoint was trained)
+
+Note: trained checkpoints are not committed to this repo (see [Repository Structure](#repository-structure))
+— you need one produced by either the notebook or `src/train.py` before inference will work.
+
+### Training from the command line
+
+```bash
+python -m src.train --data-dir data/clean --checkpoint-dir checkpoints --epochs 65 --batch-size 32
+```
+
+This mirrors the notebook's training loop (LSGAN adversarial loss + weighted L1, Adam,
+checkpoint saved every epoch) with CLI flags instead of hardcoded notebook variables. Run
+`python -m src.train --help` for the full list of options (learning rate, `--l1-lambda`,
+`--resume <checkpoint>` to continue from a saved epoch, etc.). This has not been run
+end-to-end in this environment (no GPU available) — the notebook's own training run (Colab,
+T4 GPU) is what produced the results reported above.
 
 ---
 
