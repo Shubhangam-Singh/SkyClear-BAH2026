@@ -92,6 +92,7 @@ skyclear_gan/
 │   ├── model.py
 │   ├── train.py
 │   └── inference.py
+├── app.py                           # Gradio interactive demo (reuses src/ modules)
 ├── README.md
 ├── requirements.txt
 ├── outputs/                        # Sample before/after result images
@@ -182,6 +183,43 @@ checkpoint saved every epoch) with CLI flags instead of hardcoded notebook varia
 `--resume <checkpoint>` to continue from a saved epoch, etc.). This has not been run
 end-to-end in this environment (no GPU available) — the notebook's own training run (Colab,
 T4 GPU) is what produced the results reported above.
+
+---
+
+## Interactive Demo
+
+A Gradio web UI ([`app.py`](./app.py)) is available for trying the model interactively in a
+browser instead of the CLI. It reuses `src/model.py` and the `load_generator`/`preprocess`/
+`postprocess` helpers from `src/inference.py` directly — no model-loading or pre/post-processing
+logic is duplicated.
+
+```bash
+pip install -r requirements.txt
+python app.py
+```
+
+This loads the checkpoint at `checkpoints/skyclear_epoch65.pt` once at startup (kept in memory so
+repeated uploads are fast, not reloaded per request), then prints a local URL — by default
+`http://127.0.0.1:7860` — which opens automatically or can be pasted into your browser. Upload any
+image, click **Remove Clouds**, and the resized (128×128) input and the model's cloud-removed
+output are shown side by side. The checkpoint path is resolved relative to `app.py` itself, so the
+demo can be launched from any working directory.
+
+**Sample images:** a few ready-made cloudy images ship in [`examples/`](./examples) and appear
+under the upload box — click one to load it instead of supplying your own image, then hit
+**Remove Clouds**.
+
+**Public link:** add `--share` to also generate a temporary public Gradio URL (handy for sharing a
+live demo without deploying):
+
+```bash
+python app.py --share
+```
+
+**Robustness:** if no checkpoint exists at the expected path (or it can't be loaded), `app.py`
+prints a clear message — with the `src/train.py` command to produce one — and exits instead of
+crashing. Errors while processing an individual image surface as a clean in-UI notice rather than a
+raw traceback.
 
 ---
 
