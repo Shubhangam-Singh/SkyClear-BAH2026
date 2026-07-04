@@ -14,7 +14,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
-<script type="module" src="https://gradio.s3-us-west-2.amazonaws.com/6.19.0/gradio.js"></script>
 <style>
   /* ============ Tokens ============
      bg          #0B1026  deep space navy (base)
@@ -519,12 +518,12 @@
   .demo-frame .corner--tr{ top:10px; right:10px; border-top:2px solid; border-right:2px solid; border-top-right-radius:6px; }
   .demo-frame .corner--bl{ bottom:10px; left:10px; border-bottom:2px solid; border-left:2px solid; border-bottom-left-radius:6px; }
   .demo-frame .corner--br{ bottom:10px; right:10px; border-bottom:2px solid; border-right:2px solid; border-bottom-right-radius:6px; }
-  gradio-app{
+  .demo-frame iframe{
     display:block;
     width:100%;
     min-height:512px;
+    border:0;
     border-radius:calc(var(--radius-porthole) - 4px);
-    overflow:hidden;
   }
   .demo-loading{
     position:absolute;
@@ -870,7 +869,13 @@
           <p>Demo is waking up…</p>
           <p class="demo-loading-note">Hugging Face Spaces can take up to a minute to cold-start after inactivity — thanks for your patience.</p>
         </div>
-        <gradio-app src="https://shubhixion-skyclear-cloud-removal.hf.space"></gradio-app>
+        <iframe
+          id="demo-iframe"
+          src="https://shubhixion-skyclear-cloud-removal.hf.space"
+          title="SkyClear cloud removal — live demo"
+          loading="lazy"
+          allow="clipboard-write"
+        ></iframe>
       </div>
       <p class="demo-fallback">Demo not loading? <a href="https://shubhixion-skyclear-cloud-removal.hf.space" target="_blank" rel="noopener">Open it directly →</a></p>
     </div>
@@ -1001,24 +1006,19 @@
     }
   })();
 
-  // Gradio embed loading placeholder
+  // Demo iframe loading placeholder — hide once the iframe actually loads
   (function () {
-    var app = document.querySelector('gradio-app');
+    var frame = document.getElementById('demo-iframe');
     var overlay = document.getElementById('demo-loading');
-    if (!app || !overlay) return;
+    if (!frame || !overlay) return;
     var done = false;
     function hide() {
       if (done) return;
       done = true;
       overlay.classList.add('is-hidden');
     }
-    var poll = setInterval(function () {
-      if ((app.shadowRoot && app.shadowRoot.childElementCount > 0) || app.children.length > 0) {
-        hide();
-        clearInterval(poll);
-      }
-    }, 400);
-    setTimeout(function () { hide(); clearInterval(poll); }, 16000);
+    frame.addEventListener('load', hide);
+    setTimeout(hide, 16000);
   })();
 
   // Mouse parallax on the hero atmosphere/HUD — desktop pointer only, skipped for reduced motion
